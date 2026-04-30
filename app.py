@@ -36,15 +36,12 @@ init_db()
 st.markdown("""
     <style>
     [data-testid="stSidebar"] { background: linear-gradient(180deg, #064e3b 0%, #0891b2 100%) !important; }
-    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] .streamlit-expanderHeader p {
-        color: #FFFFFF !important; font-weight: 600 !important;
-    }
+    [data-testid="stSidebar"] * { color: #FFFFFF !important; font-weight: 600 !important; }
     .suma-text { font-size: 42px; font-weight: 900; color: #1E3A8A; line-height: 0.7; }
     .ia-text { font-size: 46px; font-weight: 900; background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .eslogan-text { color: #475569; font-size: 0.9rem; font-style: italic; font-weight: 500; display: block; margin-top: -2px; }
     [data-testid="stMetric"] { background-color: #ffffff !important; border: 1px solid #e2e8f0 !important; border-radius: 12px !important; padding: 12px !important; border-top: 3px solid #10B981 !important; }
     [data-testid="stMetricValue"] { font-size: 1.1rem !important; font-weight: 700 !important; color: #0f172a !important; }
-    .pendiente-container { display: flex; justify-content: flex-end; margin: 5px 0; }
     .pendiente-text { color: #b91c1c; font-size: 0.85rem; font-weight: 700; padding: 5px 10px; border: 1px solid #b91c1c; border-radius: 6px; background-color: #fef2f2; }
     </style>
     """, unsafe_allow_html=True)
@@ -68,7 +65,7 @@ with st.sidebar:
     if saldo_anterior == 0:
         with st.expander("⚙️ CONFIGURACIÓN INICIAL"):
             base = st.number_input("Saldo Inicial:", value=0.0)
-            if st.button("🚀 Cargar Base", use_container_width=True):
+            if st.button(" Cargar Base", use_container_width=True):
                 conn = sqlite3.connect('sumaia_history.db')
                 with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%Y-%m-%d %H:%M"), 0.0, 0.0, 0.0, base, "INICIAL"))
                 st.rerun()
@@ -111,14 +108,12 @@ if arch_pdf:
         df['Ref_Limpia'] = df['Referencia'].astype(str).str.replace(r'\D', '', regex=True)
         df["Estatus"] = "❌ Pendiente"
 
-        # --- CONCILIACIÓN SECUENCIAL (AHORRA MEMORIA) ---
         refs_val = set(st.session_state['manual_refs'])
         if img_rec:
             for foto in img_rec:
                 try:
                     with Image.open(foto) as img:
                         img = img.convert('L')
-                        img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
                         txt = pytesseract.image_to_string(img, config='--psm 6').upper()
                         nums = re.findall(r'\d{5,}', txt)
                         for n in nums:
@@ -144,7 +139,7 @@ if arch_pdf:
         c3.metric("COMISIONES", f"Bs. {t_com:,.2f}")
         c4.metric("SALDO FINAL", f"Bs. {saldo_f:,.2f}")
 
-        st.markdown(f'<div class="pendiente-container"><div class="pendiente-text">Por Justificar: Bs. {pend:,.2f}</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display:flex; justify-content:flex-end;"><div class="pendiente-text">Por Justificar: Bs. {pend:,.2f}</div></div>', unsafe_allow_html=True)
         
         st.dataframe(df[["Fecha", "Referencia", "Descripción", "Monto", "Estatus"]].style.apply(
             lambda r: ['background-color: #fef2f2' if r['Estatus'] == "❌ Pendiente" else 'background-color: #f0fdf4']*5, axis=1), 
@@ -154,5 +149,6 @@ if arch_pdf:
             conn = sqlite3.connect('sumaia_history.db')
             with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%Y-%m-%d %H:%M"), t_ing, t_egr_neto, t_com, saldo_f, "CIERRE"))
             st.success("Guardado."); st.rerun()
+        
+        gc.collect()
 
-        gc.collect() # Limpieza final de memoria
