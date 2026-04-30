@@ -32,7 +32,7 @@ def obtener_ultimo_saldo():
 
 init_db()
 
-# --- ESTILO VISUAL (REDISEÑO DE ESPACIOS) ---
+# --- ESTILO VISUAL (RECUADROS ELEGANTES Y ENCABEZADO COMPACTO) ---
 st.markdown("""
     <style>
     /* PANEL LATERAL */
@@ -44,34 +44,55 @@ st.markdown("""
         font-weight: 600 !important;
     }
     .frase-ia {
-        color: #FFFFFF; font-size: 1.2rem; font-style: italic;
+        color: #FFFFFF; font-size: 1.1rem; font-style: italic;
         text-align: center; border-bottom: 1px solid rgba(255,255,255,0.3);
-        padding-bottom: 10px; margin-bottom: 20px; font-weight: 300;
+        padding-bottom: 8px; margin-bottom: 15px; font-weight: 300;
     }
 
-    /* ENCABEZADO: Título y Eslogan pegados */
-    .suma-text { font-size: 45px; font-weight: 900; color: #1E3A8A; line-height: 0.8; }
-    .ia-text { font-size: 50px; font-weight: 900; background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .eslogan-text { color: #475569; font-size: 0.95rem; font-style: italic; font-weight: 500; display: block; margin-top: -5px; }
+    /* ENCABEZADO COMPACTO */
+    .suma-text { font-size: 42px; font-weight: 900; color: #1E3A8A; line-height: 0.7; }
+    .ia-text { font-size: 46px; font-weight: 900; background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .eslogan-text { color: #475569; font-size: 0.9rem; font-style: italic; font-weight: 500; display: block; margin-top: -2px; }
+
+    /* RECUADROS DE MÉTRICAS ELEGANTES */
+    [data-testid="stMetric"] {
+        background-color: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        padding: 15px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+        border-top: 3px solid #10B981 !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 1.1rem !important; /* Tamaño más pequeño y elegante */
+        font-weight: 700 !important;
+        color: #0f172a !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.75rem !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        color: #64748b !important;
+    }
 
     /* Monto por justificar alineado a la derecha */
     .pendiente-container {
         display: flex;
         justify-content: flex-end;
-        margin: 10px 0;
+        margin: 5px 0;
     }
     .pendiente-text {
-        color: #b91c1c; font-size: 0.9rem; font-weight: 700;
-        padding: 6px 12px; border: 1.5px solid #b91c1c;
+        color: #b91c1c; font-size: 0.85rem; font-weight: 700;
+        padding: 5px 10px; border: 1px solid #b91c1c;
         border-radius: 6px; background-color: #fef2f2;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- ENCABEZADO ---
-c_log, c_tit = st.columns([1, 9])
+c_log, c_tit = st.columns([0.15, 0.85])
 with c_log:
-    if os.path.exists("logo_sumaiq.png"): st.image("logo_sumaiq.png", width=85)
+    if os.path.exists("logo_sumaiq.png"): st.image("logo_sumaiq.png", width=80)
 with c_tit:
     st.markdown('<div><span class="suma-text">SUMA</span><span class="ia-text">IA</span></div>', unsafe_allow_html=True)
     st.markdown('<span class="eslogan-text">Tus gastos y nómina en perfecto orden</span>', unsafe_allow_html=True)
@@ -159,14 +180,13 @@ with tab1:
             nuevo_saldo = saldo_acumulado + df['M_Num'].sum()
             pend = df[(df['Estatus'] == "❌ Pendiente") & (df['M_Num'] < 0)]['M_Num'].abs().sum()
 
-            st.subheader("📋 Resumen del Periodo")
+            st.markdown("#### Resumen del Periodo")
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("INGRESOS", f"Bs. {ing:,.2f}")
             c2.metric("EGRESOS", f"Bs. {egr:,.2f}")
             c3.metric("COMISIONES", f"Bs. {com:,.2f}")
             c4.metric("SALDO FINAL", f"Bs. {nuevo_saldo:,.2f}")
 
-            # Monto por justificar alineado a la derecha
             st.markdown(f'<div class="pendiente-container"><div class="pendiente-text">Por Justificar: Bs. {pend:,.2f}</div></div>', unsafe_allow_html=True)
             
             st.dataframe(df[["Fecha", "Referencia", "Descripción", "Monto", "Estatus"]].style.apply(
@@ -189,3 +209,4 @@ with tab2:
         if not hist_df.empty: st.dataframe(hist_df, use_container_width=True, hide_index=True)
         else: st.info("Sin datos históricos.")
     except: st.write("Historial listo.")
+
