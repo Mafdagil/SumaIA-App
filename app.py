@@ -9,11 +9,11 @@ import sqlite3
 from datetime import datetime
 from io import BytesIO
 
-# 1. CONFIGURACIÓN OCR
+# Configuración OCR para Nube (Linux) y Local (Windows)
 if os.name == 'nt':
     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-st.set_page_config(page_title="Suma IA - Gestión de Finanzas", layout="wide", page_icon="🏦")
+st.set_page_config(page_title="Suma IA", layout="wide")
 
 # --- BASE DE DATOS ---
 def init_db():
@@ -27,72 +27,62 @@ def obtener_ultimo_saldo():
         conn = sqlite3.connect('sumaia_history.db')
         res = conn.execute("SELECT saldo FROM finanzas ORDER BY ROWID DESC LIMIT 1").fetchone()
         conn.close()
-        return res[0] if res else None
-    except: return None
+        return res[0] if res else 0.0
+    except: return 0.0
 
 init_db()
 
-# --- ESTILO VISUAL ---
+# --- ESTILO VISUAL ELEGANTE ---
 st.markdown("""
     <style>
-    /* Intento de forzar color del panel */
-    [data-testid="stSidebar"] {
-        background-color: #064e3b !important;
-        background-image: linear-gradient(180deg, #064e3b 0%, #0891b2 100%) !important;
-    }
+    [data-testid="stSidebar"] { background-image: linear-gradient(180deg, #064e3b 0%, #0891b2 100%) !important; }
     [data-testid="stSidebar"] * { color: white !important; }
     
-    /* Textos Marca */
-    .suma-text { font-size: 48px !important; font-weight: 900 !important; color: #1E3A8A; }
-    .ia-text { 
-        font-size: 52px !important; font-weight: 900 !important; 
-        background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%); 
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-    }
-    .eslogan { color: #0891b2 !important; font-weight: bold; font-style: italic; }
+    /* Números de métricas más pequeños y elegantes */
+    [data-testid="stMetricValue"] { font-size: 1.5rem !important; font-weight: 600 !important; color: #1e293b !important; }
+    [data-testid="stMetricLabel"] { font-size: 0.9rem !important; text-transform: uppercase; letter-spacing: 1px; }
     
-    /* Caja de Métricas */
-    [data-testid="stMetric"] {
-        background-color: #f0f9ff;
-        border: 1px solid #bae6fd;
-        border-radius: 10px;
-        padding: 10px;
-    }
+    .suma-text { font-size: 40px !important; font-weight: 900; color: #1E3A8A; }
+    .ia-text { font-size: 44px !important; font-weight: 900; background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- ENCABEZADO ---
-col_logo, col_tit = st.columns([1, 8])
-logo_path = "logo_sumaiq.png"
-with col_logo:
-    if os.path.exists(logo_path): st.image(Image.open(logo_path), width=80)
-with col_tit:
+col1, col2 = st.columns([1, 5])
+with col1:
+    if os.path.exists("logo_sumaiq.png"): st.image("logo_sumaiq.png", width=80)
+with col2:
     st.markdown('<div><span class="suma-text">SUMA</span><span class="ia-text">IA</span></div>', unsafe_allow_html=True)
-    st.markdown('<p class="eslogan">Tus gastos y nómina en perfecto orden</p>', unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 if 'manual_refs' not in st.session_state: st.session_state['manual_refs'] = []
-if 'reset_cnt' not in st.session_state: st.session_state['reset_cnt'] = 0
 
 with st.sidebar:
-    st.header("Panel de Control")
-    saldo_db = obtener_ultimo_saldo()
-    if saldo_db is None:
-        m_ini = st.number_input("Saldo Inicial:", value=0.0)
-        if st.button("🚀 Iniciar"):
+    st.header("Control de Cierre")
+    saldo_anterior = obtener_ultimo_saldo()
+    st.metric("Saldo Anterior Acumulado", f"Bs. {saldo_anterior:,.2f}")
+    
+    if saldo_anterior == 0:
+        nuevo_inicial = st.number_input("Establecer Saldo Inicial (Bs.):", value=0.0)
+        if st.button("🚀 Cargar Saldo"):
             conn = sqlite3.connect('sumaia_history.db')
-            with conn: conn.execute("INSERT INTO finanzas VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%Y-%m-%d %H:%M"), 0.0, 0.0, 0.0, m_ini, "Inicio"))
+            with conn: conn.execute("INSERT INTO finanzas VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%Y-%m-%d %H:%M"), 0.0, 0.0, 0.0, nuevo_inicial, "Saldo Inicial"))
             st.rerun()
-    else:
-        st.metric("Saldo Actual", f"Bs. {saldo_db:,.2f}")
 
     st.markdown("---")
-    archivos_banco = st.file_uploader("PDF Banco", type=["pdf"], accept_multiple_files=True, key=f"b_{st.session_state.reset_cnt}")
-    fotos_recibos = st.file_uploader("Fotos Recibos", type=["jpg", "png", "jpeg"], accept_multiple_files=True, key=f"i_{st.session_state.reset_cnt}")
+    archivos_banco = st.file_uploader("Subir PDF Banco", type=["pdf"], accept_multiple_files=True)
+    fotos_recibos = st.file_uploader("Subir Fotos Recibos", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
     
-    if st.button("🗑️ Borrar Todo"):
+    with st.expander("📝 CARGA MANUAL"):
+        ref_input = st.text_input("N° Referencia:")
+        if st.button("Añadir Referencia"):
+            if ref_input: st.session_state['manual_refs'].append(re.sub(r'\D', '', ref_input))
+            st.success("Referencia añadida")
+
+    if st.button("🗑️ Reiniciar Historial"):
         if os.path.exists('sumaia_history.db'): os.remove('sumaia_history.db')
-        st.session_state['manual_refs'] = []; st.session_state['reset_cnt'] += 1; st.rerun()
+        st.session_state['manual_refs'] = []
+        st.rerun()
 
 # --- PROCESAMIENTO ---
 if archivos_banco:
@@ -120,12 +110,14 @@ if archivos_banco:
         df['Ref_Limpia'] = df['Referencia'].astype(str).str.replace(r'\D', '', regex=True)
         df["Estatus"] = "❌ Pendiente"
 
-        # Conciliación OCR
+        # Conciliación con OCR Mejorado
         refs_val = set(st.session_state['manual_refs'])
         if fotos_recibos:
             for foto in fotos_recibos:
                 try:
-                    txt = pytesseract.image_to_string(Image.open(foto)).upper()
+                    img = Image.open(foto).convert('L')
+                    img = ImageEnhance.Contrast(img).enhance(2.0) # Mejora lectura
+                    txt = pytesseract.image_to_string(img, config='--psm 6').upper()
                     nums = re.findall(r'\d{5,}', txt)
                     for n in nums:
                         mask = df['Ref_Limpia'].str.contains(n, na=False)
@@ -135,26 +127,30 @@ if archivos_banco:
         for rv in refs_val:
             df.loc[df['Ref_Limpia'].str.contains(rv, na=False), "Estatus"] = "✅ Conciliado"
 
-        # --- AQUÍ ESTÁ EL CÁLCULO DEL MONTO PENDIENTE ---
+        # Totales
+        t_ing = df[df['M_Num'] > 0]['M_Num'].sum()
+        t_egr = abs(df[df['M_Num'] < 0]['M_Num'].sum())
+        # El Saldo Final considera el Saldo Anterior Acumulado
+        saldo_banco_actual = df['M_Num'].sum()
+        saldo_total_sistema = saldo_anterior + saldo_banco_actual
         m_pend = df[(df['Estatus'] == "❌ Pendiente") & (df['M_Num'] < 0)]['M_Num'].abs().sum()
 
-        # Mostrar Resultados
-        st.markdown("### 📊 Resumen de Cierre")
+        # --- RESULTADOS ---
+        st.subheader("📊 Resumen de Cierre Financiero")
         c1, c2, c3 = st.columns(3)
-        c1.metric("Monto por Justificar", f"Bs. {m_pend:,.2f}", delta="- Faltan Recibos", delta_color="inverse")
-        c2.metric("Total Ingresos", f"Bs. {df[df['M_Num']>0]['M_Num'].sum():,.2f}")
-        c3.metric("Saldo Final", f"Bs. {df['M_Num'].sum():,.2f}")
+        c1.metric("Por Justificar", f"Bs. {m_pend:,.2f}", "Faltan Recibos", delta_color="inverse")
+        c2.metric("Total Ingresos", f"Bs. {t_ing:,.2f}")
+        c3.metric("Saldo Acumulado Final", f"Bs. {saldo_total_sistema:,.2f}")
 
         st.markdown("---")
-        st.subheader("📝 Detalle de Movimientos")
         st.dataframe(df[["Fecha", "Referencia", "Descripción", "Monto", "Estatus"]].style.apply(
             lambda r: ['background-color: #fef2f2' if r['Estatus'] == "❌ Pendiente" else 'background-color: #f0fdf4']*5, axis=1), 
             use_container_width=True, hide_index=True)
 
-        # Exportación
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as wr:
-            df.to_excel(wr, index=False)
-        st.download_button("📥 Descargar Excel", output.getvalue(), "Reporte.xlsx", use_container_width=True)
-else:
-    st.info("Sube los archivos para procesar.")
+        if st.button("💾 Guardar y Acumular Saldo para Siguiente Mes"):
+            conn = sqlite3.connect('sumaia_history.db')
+            with conn:
+                conn.execute("INSERT INTO finanzas VALUES (?,?,?,?,?,?)", 
+                            (datetime.now().strftime("%Y-%m-%d %H:%M"), t_ing, t_egr, 0.0, saldo_total_sistema, "Cierre Mensual"))
+            st.success("✅ Saldo acumulado correctamente en el historial.")
+            st.rerun()
