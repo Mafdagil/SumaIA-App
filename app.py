@@ -15,10 +15,9 @@ if os.name == 'nt':
 
 st.set_page_config(page_title="Suma IA", layout="wide")
 
-# --- BASE DE DATOS MEJORADA ---
+# --- BASE DE DATOS ---
 def init_db():
     conn = sqlite3.connect('sumaia_history.db')
-    # Tabla para cierres históricos
     conn.execute('''CREATE TABLE IF NOT EXISTS cierres 
                  (fecha TEXT, ingresos REAL, egresos REAL, comisiones REAL, saldo REAL, tipo TEXT)''')
     conn.close()
@@ -33,82 +32,102 @@ def obtener_ultimo_saldo():
 
 init_db()
 
-# --- ESTILO CSS (CORRECCIÓN DE VISIBILIDAD) ---
+# --- ESTILO CSS (LIMPIO Y CONTRASTADO) ---
 st.markdown("""
     <style>
-    /* PANEL LATERAL: Letras blancas con sombra negra */
+    /* PANEL LATERAL */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #064e3b 0%, #0891b2 100%) !important;
     }
-    [data-testid="stSidebar"] * {
-        color: #FFFFFF !important;
-        font-weight: 700 !important;
-        text-shadow: 1px 1px 2px #000000;
-    }
     
-    /* INPUTS EN EL SIDEBAR (Para que se vea lo que escribes) */
-    [data-testid="stSidebar"] input {
-        color: #000000 !important;
+    /* Textos en blanco puro sobre fondo de color */
+    [data-testid="stSidebar"] .stMarkdown p, 
+    [data-testid="stSidebar"] .stMarkdown h1,
+    [data-testid="stSidebar"] .stMarkdown h2,
+    [data-testid="stSidebar"] .stMarkdown h3,
+    [data-testid="stSidebar"] label {
+        color: #FFFFFF !important;
         text-shadow: none !important;
     }
 
-    /* CUERPO PRINCIPAL */
-    .suma-text { font-size: 45px; font-weight: 900; color: #1E3A8A; }
-    .ia-text { font-size: 50px; font-weight: 900; background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-    .eslogan { color: #475569; font-style: italic; font-weight: 600; margin-top: -15px; margin-bottom: 20px; }
+    /* Frase elegante inicial */
+    .frase-ia {
+        color: #FFFFFF;
+        font-size: 1.1rem;
+        font-style: italic;
+        font-weight: 300;
+        margin-bottom: 20px;
+        text-align: center;
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+        padding-bottom: 10px;
+    }
 
-    /* CAJA ROJA DE PENDIENTES */
+    /* Inputs (Texto negro sobre fondo blanco dentro del sidebar) */
+    [data-testid="stSidebar"] input {
+        color: #000000 !important;
+    }
+
+    /* CUERPO PRINCIPAL */
+    .suma-text { font-size: 45px; font-weight: 900; color: #1E3A8A; line-height: 1; }
+    .ia-text { font-size: 50px; font-weight: 900; background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    
+    /* Eslogan pegado al logo */
+    .eslogan-container { margin-top: -10px; margin-bottom: 25px; }
+    .eslogan-text { color: #475569; font-size: 1.1rem; font-style: italic; font-weight: 500; }
+
+    /* Caja roja de pendientes */
     .pendiente-box {
-        color: #b91c1c; font-size: 1.1rem; font-weight: 800; text-align: center;
-        padding: 12px; border: 2px solid #b91c1c; border-radius: 8px;
-        background-color: #fef2f2; margin: 15px 0;
+        color: #b91c1c; font-size: 1rem; font-weight: 700; text-align: center;
+        padding: 10px; border: 1px solid #b91c1c; border-radius: 8px;
+        background-color: #fef2f2; margin: 10px 0;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # --- ENCABEZADO ---
-c_log, c_tit = st.columns([1, 5])
+c_log, c_tit = st.columns([1, 9])
 with c_log:
-    if os.path.exists("logo_sumaiq.png"): st.image("logo_sumaiq.png", width=90)
+    if os.path.exists("logo_sumaiq.png"): st.image("logo_sumaiq.png", width=85)
 with c_tit:
     st.markdown('<div><span class="suma-text">SUMA</span><span class="ia-text">IA</span></div>', unsafe_allow_html=True)
-    st.markdown('<p class="eslogan">Tus gastos y nómina en perfecto orden</p>', unsafe_allow_html=True)
+    st.markdown('<div class="eslogan-container"><span class="eslogan-text">Tus gastos y nómina en perfecto orden</span></div>', unsafe_allow_html=True)
 
 # --- SIDEBAR (PANEL DE CONTROL) ---
 if 'manual_refs' not in st.session_state: st.session_state['manual_refs'] = []
 
 with st.sidebar:
-    st.title("Panel de Control")
+    st.markdown('<div class="frase-ia">Gestión Inteligente de tus Finanzas</div>', unsafe_allow_html=True)
+    
     saldo_actual = obtener_ultimo_saldo()
     st.metric("Saldo Acumulado", f"Bs. {saldo_actual:,.2f}")
 
     if saldo_actual == 0:
-        st.subheader("⚙️ Configuración Inicial")
+        st.markdown("### ⚙️ Configuración Inicial")
         base = st.number_input("Saldo Inicial de Cuenta:", value=0.0)
-        if st.button("🚀 Cargar Primer Saldo"):
+        if st.button("🚀 Cargar Primer Saldo", use_container_width=True):
             conn = sqlite3.connect('sumaia_history.db')
             with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", 
                                    (datetime.now().strftime("%Y-%m-%d %H:%M"), 0.0, 0.0, 0.0, base, "INICIAL"))
             st.rerun()
 
     st.markdown("---")
-    arch_pdf = st.file_uploader("📂 PDF Banco", type=["pdf"], accept_multiple_files=True)
-    img_rec = st.file_uploader("📸 Fotos Recibos", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+    arch_pdf = st.file_uploader("📂 Subir PDF Banco", type=["pdf"], accept_multiple_files=True)
+    img_rec = st.file_uploader("📸 Subir Fotos Recibos", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
     
     st.markdown("---")
     ref_m = st.text_input("N° Referencia Manual:")
-    if st.button("➕ Añadir Ref"):
+    if st.button("➕ Añadir Referencia", use_container_width=True):
         if ref_m: st.session_state['manual_refs'].append(re.sub(r'\D', '', ref_m))
 
-    if st.button("🗑️ REINICIAR APP"):
+    if st.button("🗑️ REINICIAR TODO", use_container_width=True):
         if os.path.exists('sumaia_history.db'): os.remove('sumaia_history.db')
         st.session_state['manual_refs'] = []
         st.rerun()
 
-# --- PROCESAMIENTO Y REPORTES ---
-tabs = st.tabs(["📊 Conciliación Actual", "📅 Historial y Reportes"])
+# --- CUERPO PRINCIPAL ---
+tab1, tab2 = st.tabs(["📊 Conciliación Actual", "📅 Historial y Reportes"])
 
-with tabs[0]:
+with tab1:
     if arch_pdf:
         filas = []
         for archivo in arch_pdf:
@@ -122,6 +141,7 @@ with tabs[0]:
         
         if filas:
             df = pd.DataFrame(filas, columns=["Fecha", "Referencia", "Descripción", "Monto", "Balance"])
+            
             def limpiar_m(v):
                 if not v: return 0.0
                 s = str(v).strip().upper().replace('BS.', '').replace(' ', '')
@@ -133,7 +153,7 @@ with tabs[0]:
             df['Ref_Limpia'] = df['Referencia'].astype(str).str.replace(r'\D', '', regex=True)
             df["Estatus"] = "❌ Pendiente"
 
-            # OCR MEJORADO
+            # OCR AGRESIVO
             refs_val = set(st.session_state['manual_refs'])
             if img_rec:
                 for foto in img_rec:
@@ -158,6 +178,7 @@ with tabs[0]:
             nuevo_saldo = saldo_actual + df['M_Num'].sum()
             pend = df[(df['Estatus'] == "❌ Pendiente") & (df['M_Num'] < 0)]['M_Num'].abs().sum()
 
+            st.subheader("📋 Resumen de Cierre")
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("INGRESOS", f"Bs. {ing:,.2f}")
             c2.metric("EGRESOS", f"Bs. {egr:,.2f}")
@@ -170,32 +191,29 @@ with tabs[0]:
                 lambda r: ['background-color: #fef2f2' if r['Estatus'] == "❌ Pendiente" else 'background-color: #f0fdf4']*5, axis=1), 
                 use_container_width=True, hide_index=True)
 
-            if st.button("💾 CERRAR MES Y GUARDAR HISTORIAL", use_container_width=True):
+            if st.button("💾 CERRAR MES Y GUARDAR EN HISTORIAL", use_container_width=True):
                 conn = sqlite3.connect('sumaia_history.db')
                 with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", 
                                        (datetime.now().strftime("%Y-%m-%d %H:%M"), ing, egr, com, nuevo_saldo, "CIERRE"))
-                st.success("Cierre guardado con éxito.")
+                st.success("Cierre guardado correctamente.")
                 st.rerun()
+    else:
+        st.info("Sube el PDF del banco en el panel izquierdo para comenzar.")
 
-with tabs[1]:
-    st.subheader("📚 Historial Acumulado")
+with tab2:
+    st.subheader("📚 Historial de Movimientos")
     try:
         conn = sqlite3.connect('sumaia_history.db')
         hist_df = pd.read_sql_query("SELECT * FROM cierres", conn)
         conn.close()
         
         if not hist_df.empty:
-            st.dataframe(hist_df, use_container_width=True)
-            
+            st.dataframe(hist_df, use_container_width=True, hide_index=True)
             st.markdown("---")
-            st.subheader("🔍 Resumen Anual")
-            # Cálculo simple anual
-            anio_act = datetime.now().year
-            ing_anual = hist_df['ingresos'].sum()
-            egr_anual = hist_df['egresos'].sum()
-            st.info(f"En lo que va del año {anio_act}, has gestionado un total de **Bs. {ing_anual:,.2f}** en ingresos y **Bs. {egr_anual:,.2f}** en egresos.")
+            st.markdown("#### Resumen Anual Consolidado")
+            st.write(f"Total Ingresos del Año: **Bs. {hist_df['ingresos'].sum():,.2f}**")
+            st.write(f"Total Egresos del Año: **Bs. {hist_df['egresos'].sum():,.2f}**")
         else:
-            st.write("No hay cierres guardados todavía.")
+            st.write("No hay datos históricos registrados.")
     except:
-        st.write("Base de datos lista para recibir el primer cierre.")
-
+        st.write("Historial listo para su primer registro.")
