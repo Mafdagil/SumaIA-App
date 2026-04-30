@@ -2,12 +2,12 @@ import os
 import pandas as pd
 import streamlit as st
 import pdfplumber
-from PIL import Image, ImageEnhance, ImageOps, ImageFilter
+from PIL import Image, ImageEnhance, ImageOps
 import pytesseract
 import re
 import sqlite3
 from datetime import datetime
-from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor # Para leer en paralelo
 
 # --- CONFIGURACIÓN OCR ---
 if os.name == 'nt':
@@ -15,7 +15,7 @@ if os.name == 'nt':
 
 st.set_page_config(page_title="Suma IA", layout="wide", page_icon="🏦")
 
-# --- BASE DE DATOS LOCAL ---
+# --- BASE DE DATOS ---
 def init_db():
     conn = sqlite3.connect('sumaia_history.db')
     conn.execute('''CREATE TABLE IF NOT EXISTS cierres 
@@ -32,69 +32,33 @@ def obtener_ultimo_saldo():
 
 init_db()
 
-# --- ESTILO VISUAL (MANTENIENDO LO BUENO) ---
+# --- FUNCIÓN DE LECTURA VELOZ (OCR) ---
+def leer_recibo_veloz(foto):
+    try:
+        img = Image.open(foto).convert('L')
+        # Reducimos el escalado a 2x (equilibrio entre velocidad y precisión)
+        img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
+        img = ImageEnhance.Contrast(img).enhance(2.0)
+        # Una sola pasada con PSM 6 es la más rápida y efectiva para recibos
+        txt = pytesseract.image_to_string(img, config='--psm 6').upper()
+        return re.findall(r'\d{5,}', txt)
+    except:
+        return []
+
+# --- ESTILO VISUAL ---
 st.markdown("""
     <style>
-    /* PANEL LATERAL */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #064e3b 0%, #0891b2 100%) !important;
+    [data-testid="stSidebar"] { background: linear-gradient(180deg, #064e3b 0%, #0891b2 100%) !important; }
+    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] .streamlit-expanderHeader p {
+        color: #FFFFFF !important; font-weight: 600 !important;
     }
-    
-    /* Forzar letras blancas en todo el sidebar y desplegables */
-    [data-testid="stSidebar"] .stMarkdown p, 
-    [data-testid="stSidebar"] label, 
-    [data-testid="stSidebar"] h2, 
-    [data-testid="stSidebar"] .streamlit-expanderHeader p {
-        color: #FFFFFF !important;
-        font-weight: 600 !important;
-    }
-
-    .frase-ia {
-        color: #FFFFFF; font-size: 1.1rem; font-style: italic;
-        text-align: center; border-bottom: 1px solid rgba(255,255,255,0.3);
-        padding-bottom: 8px; margin-bottom: 15px; font-weight: 300;
-    }
-
-    /* ENCABEZADO COMPACTO */
     .suma-text { font-size: 42px; font-weight: 900; color: #1E3A8A; line-height: 0.7; }
-    .ia-text { 
-        font-size: 46px; font-weight: 900; 
-        background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%); 
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
-    }
+    .ia-text { font-size: 46px; font-weight: 900; background: linear-gradient(90deg, #10B981 0%, #06B6D4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
     .eslogan-text { color: #475569; font-size: 0.9rem; font-style: italic; font-weight: 500; display: block; margin-top: -2px; }
-
-    /* RECUADROS DE MÉTRICAS ELEGANTES */
-    [data-testid="stMetric"] {
-        background-color: #ffffff !important;
-        border: 1px solid #e2e8f0 !important;
-        border-radius: 12px !important;
-        padding: 12px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
-        border-top: 3px solid #10B981 !important;
-    }
-    [data-testid="stMetricValue"] {
-        font-size: 1.1rem !important;
-        font-weight: 700 !important;
-        color: #0f172a !important;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: 0.75rem !important;
-        text-transform: uppercase !important;
-        color: #64748b !important;
-    }
-
-    /* Monto por justificar alineado a la derecha */
-    .pendiente-container {
-        display: flex;
-        justify-content: flex-end;
-        margin: 5px 0;
-    }
-    .pendiente-text {
-        color: #b91c1c; font-size: 0.85rem; font-weight: 700;
-        padding: 5px 10px; border: 1px solid #b91c1c;
-        border-radius: 6px; background-color: #fef2f2;
-    }
+    [data-testid="stMetric"] { background-color: #ffffff !important; border: 1px solid #e2e8f0 !important; border-radius: 12px !important; padding: 12px !important; border-top: 3px solid #10B981 !important; }
+    [data-testid="stMetricValue"] { font-size: 1.1rem !important; font-weight: 700 !important; color: #0f172a !important; }
+    .pendiente-container { display: flex; justify-content: flex-end; margin: 5px 0; }
+    .pendiente-text { color: #b91c1c; font-size: 0.85rem; font-weight: 700; padding: 5px 10px; border: 1px solid #b91c1c; border-radius: 6px; background-color: #fef2f2; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -110,18 +74,16 @@ with c_tit:
 if 'manual_refs' not in st.session_state: st.session_state['manual_refs'] = []
 
 with st.sidebar:
-    st.markdown('<div class="frase-ia">Finanzas Inteligentes</div>', unsafe_allow_html=True)
+    st.markdown('<div style="color:white; text-align:center; font-style:italic; border-bottom:1px solid rgba(255,255,255,0.3); padding-bottom:8px; margin-bottom:15px;">Finanzas Inteligentes</div>', unsafe_allow_html=True)
     saldo_acumulado = obtener_ultimo_saldo()
     st.metric("Saldo Anterior", f"Bs. {saldo_acumulado:,.2f}")
 
-    # --- RECUPERADO: CONFIGURACIÓN INICIAL ---
     if saldo_acumulado == 0:
         with st.expander("⚙️ CONFIGURACIÓN INICIAL"):
             base = st.number_input("Establecer Saldo Inicial:", value=0.0)
             if st.button("🚀 Cargar Primer Saldo", use_container_width=True):
                 conn = sqlite3.connect('sumaia_history.db')
-                with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", 
-                                       (datetime.now().strftime("%Y-%m-%d %H:%M"), 0.0, 0.0, 0.0, base, "INICIAL"))
+                with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%Y-%m-%d %H:%M"), 0.0, 0.0, 0.0, base, "INICIAL"))
                 st.rerun()
 
     st.markdown("---")
@@ -131,14 +93,11 @@ with st.sidebar:
     with st.expander("📝 CARGA MANUAL DE REFERENCIAS"):
         ref_m = st.text_input("N° Referencia:")
         if st.button("➕ Añadir", use_container_width=True):
-            if ref_m: 
-                st.session_state['manual_refs'].append(re.sub(r'\D', '', ref_m))
-                st.toast(f"Ref {ref_m} añadida")
+            if ref_m: st.session_state['manual_refs'].append(re.sub(r'\D', '', ref_m))
 
     if st.button("🗑️ REINICIAR TODO", use_container_width=True):
         if os.path.exists('sumaia_history.db'): os.remove('sumaia_history.db')
-        st.session_state['manual_refs'] = []
-        st.rerun()
+        st.session_state['manual_refs'] = []; st.rerun()
 
 # --- PROCESAMIENTO ---
 if arch_pdf:
@@ -165,38 +124,26 @@ if arch_pdf:
         df['Ref_Limpia'] = df['Referencia'].astype(str).str.replace(r'\D', '', regex=True)
         df["Estatus"] = "❌ Pendiente"
 
-        # --- SUPER LUPA OCR ACTIVADA ---
+        # --- CONCILIACIÓN EN PARALELO (MÁS RÁPIDA) ---
         refs_val = set(st.session_state['manual_refs'])
         if img_rec:
-            for foto in img_rec:
-                try:
-                    img = Image.open(foto).convert('L')
-                    img = img.resize((img.width * 3, img.height * 3), Image.Resampling.LANCZOS)
-                    img = ImageEnhance.Contrast(img).enhance(2.5)
-                    img = ImageEnhance.Sharpness(img).enhance(2.0)
-                    
-                    # Triple pasada de lectura
-                    txt = pytesseract.image_to_string(img, config='--psm 6')
-                    txt += " " + pytesseract.image_to_string(ImageOps.invert(img), config='--psm 6')
-                    txt += " " + pytesseract.image_to_string(img, config='--psm 11')
-                    
-                    nums = re.findall(r'\d{5,}', txt.upper())
-                    for n in nums:
+            with ThreadPoolExecutor() as executor:
+                resultados = list(executor.map(leer_recibo_veloz, img_rec))
+                for lista_refs in resultados:
+                    for n in lista_refs:
                         mask = df['Ref_Limpia'].str.contains(n, na=False)
                         if mask.any(): refs_val.update(df[mask]['Ref_Limpia'].tolist())
-                except: continue
 
         for rv in refs_val:
             df.loc[df['Ref_Limpia'].str.contains(rv, na=False), "Estatus"] = "✅ Conciliado"
 
         # CÁLCULOS
         ing = df[df['M_Num'] > 0]['M_Num'].sum()
-        egr = abs(df[(df['M_Num'] < 0) & (~df['Descripción'].str.contains("COMISION|IVA", na=False, case=False))]['M_Num'].sum())
         com = abs(df[df['Descripción'].str.contains("COMISION|IVA", na=False, case=False)]['M_Num'].sum())
+        egr = abs(df[(df['M_Num'] < 0) & (~df['Descripción'].str.contains("COMISION|IVA", na=False, case=False))]['M_Num'].sum())
         saldo_f = saldo_acumulado + df['M_Num'].sum()
         pend = df[(df['Estatus'] == "❌ Pendiente") & (df['M_Num'] < 0)]['M_Num'].abs().sum()
 
-        # RESULTADOS
         st.markdown("#### Resumen del Periodo")
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("INGRESOS", f"Bs. {ing:,.2f}")
