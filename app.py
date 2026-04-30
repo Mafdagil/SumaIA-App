@@ -27,12 +27,12 @@ def obtener_ultimo_saldo():
         conn = sqlite3.connect('sumaia_history.db')
         res = conn.execute("SELECT saldo FROM cierres ORDER BY ROWID DESC LIMIT 1").fetchone()
         conn.close()
-        return res if res else 0.0
+        return res[0] if res else 0.0
     except: return 0.0
 
 init_db()
 
-# --- ESTILO VISUAL (ELEGANCIA Y CONTRASTE) ---
+# --- ESTILO VISUAL (MANTENIENDO LO BUENO) ---
 st.markdown("""
     <style>
     /* PANEL LATERAL */
@@ -40,7 +40,7 @@ st.markdown("""
         background: linear-gradient(180deg, #064e3b 0%, #0891b2 100%) !important;
     }
     
-    /* Forzar letras blancas en todo el sidebar (incluyendo el expander) */
+    /* Forzar letras blancas en todo el sidebar y desplegables */
     [data-testid="stSidebar"] .stMarkdown p, 
     [data-testid="stSidebar"] label, 
     [data-testid="stSidebar"] h2, 
@@ -114,11 +114,20 @@ with st.sidebar:
     saldo_acumulado = obtener_ultimo_saldo()
     st.metric("Saldo Anterior", f"Bs. {saldo_acumulado:,.2f}")
 
+    # --- RECUPERADO: CONFIGURACIÓN INICIAL ---
+    if saldo_acumulado == 0:
+        with st.expander("⚙️ CONFIGURACIÓN INICIAL"):
+            base = st.number_input("Establecer Saldo Inicial:", value=0.0)
+            if st.button("🚀 Cargar Primer Saldo", use_container_width=True):
+                conn = sqlite3.connect('sumaia_history.db')
+                with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", 
+                                       (datetime.now().strftime("%Y-%m-%d %H:%M"), 0.0, 0.0, 0.0, base, "INICIAL"))
+                st.rerun()
+
     st.markdown("---")
     arch_pdf = st.file_uploader("📂 Subir PDF Banco", type=["pdf"], accept_multiple_files=True)
     img_rec = st.file_uploader("📸 Subir Fotos Recibos", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
     
-    # ÚNICO DESPLEGABLE DE CARGA MANUAL
     with st.expander("📝 CARGA MANUAL DE REFERENCIAS"):
         ref_m = st.text_input("N° Referencia:")
         if st.button("➕ Añadir", use_container_width=True):
@@ -205,3 +214,4 @@ if arch_pdf:
             conn = sqlite3.connect('sumaia_history.db')
             with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%Y-%m-%d %H:%M"), ing, egr, com, saldo_f, "CIERRE"))
             st.success("Guardado."); st.rerun()
+
