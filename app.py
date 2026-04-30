@@ -7,9 +7,9 @@ import pytesseract
 import re
 import sqlite3
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor # Para leer en paralelo
+from concurrent.futures import ThreadPoolExecutor
 
-# --- CONFIGURACIÓN OCR ---
+# --- CONFIGURACIÓN ---
 if os.name == 'nt':
     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
@@ -32,18 +32,15 @@ def obtener_ultimo_saldo():
 
 init_db()
 
-# --- FUNCIÓN DE LECTURA VELOZ (OCR) ---
-def leer_recibo_veloz(foto):
+# --- FUNCIÓN LECTURA OCR ---
+def leer_recibo(foto):
     try:
         img = Image.open(foto).convert('L')
-        # Reducimos el escalado a 2x (equilibrio entre velocidad y precisión)
         img = img.resize((img.width * 2, img.height * 2), Image.Resampling.LANCZOS)
         img = ImageEnhance.Contrast(img).enhance(2.0)
-        # Una sola pasada con PSM 6 es la más rápida y efectiva para recibos
         txt = pytesseract.image_to_string(img, config='--psm 6').upper()
         return re.findall(r'\d{5,}', txt)
-    except:
-        return []
+    except: return []
 
 # --- ESTILO VISUAL ---
 st.markdown("""
@@ -81,7 +78,7 @@ with st.sidebar:
     if saldo_acumulado == 0:
         with st.expander("⚙️ CONFIGURACIÓN INICIAL"):
             base = st.number_input("Establecer Saldo Inicial:", value=0.0)
-            if st.button("🚀 Cargar Primer Saldo", use_container_width=True):
+            if st.button("🚀 Cargar Saldo Inicial", use_container_width=True):
                 conn = sqlite3.connect('sumaia_history.db')
                 with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%Y-%m-%d %H:%M"), 0.0, 0.0, 0.0, base, "INICIAL"))
                 st.rerun()
@@ -124,31 +121,35 @@ if arch_pdf:
         df['Ref_Limpia'] = df['Referencia'].astype(str).str.replace(r'\D', '', regex=True)
         df["Estatus"] = "❌ Pendiente"
 
-        # --- CONCILIACIÓN EN PARALELO (MÁS RÁPIDA) ---
+        # Conciliación Veloz
         refs_val = set(st.session_state['manual_refs'])
         if img_rec:
             with ThreadPoolExecutor() as executor:
-                resultados = list(executor.map(leer_recibo_veloz, img_rec))
-                for lista_refs in resultados:
-                    for n in lista_refs:
+                resultados = list(executor.map(leer_recibo, img_rec))
+                for lista in resultados:
+                    for n in lista:
                         mask = df['Ref_Limpia'].str.contains(n, na=False)
                         if mask.any(): refs_val.update(df[mask]['Ref_Limpia'].tolist())
 
         for rv in refs_val:
             df.loc[df['Ref_Limpia'].str.contains(rv, na=False), "Estatus"] = "✅ Conciliado"
 
-        # CÁLCULOS
-        ing = df[df['M_Num'] > 0]['M_Num'].sum()
-        com = abs(df[df['Descripción'].str.contains("COMISION|IVA", na=False, case=False)]['M_Num'].sum())
-        egr = abs(df[(df['M_Num'] < 0) & (~df['Descripción'].str.contains("COMISION|IVA", na=False, case=False))]['M_Num'].sum())
-        saldo_f = saldo_acumulado + df['M_Num'].sum()
+        # --- CÁLCULOS DETALLADOS ---
+        # Filtro para identificar comisiones e IVA
+        mask_com = df['Descripción'].str.contains("COMISION|IVA|COMIS|COM\.|ISLR|COM ", na=False, case=False)
+        
+        t_ing = df[df['M_Num'] > 0]['M_Num'].sum()
+        t_com = abs(df[mask_com & (df['M_Num'] < 0)]['M_Num'].sum())
+        t_egr_neto = abs(df[~mask_com & (df['M_Num'] < 0)]['M_Num'].sum())
+        saldo_banco_actual = df['M_Num'].sum()
+        saldo_f = saldo_acumulado + saldo_banco_actual
         pend = df[(df['Estatus'] == "❌ Pendiente") & (df['M_Num'] < 0)]['M_Num'].abs().sum()
 
         st.markdown("#### Resumen del Periodo")
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("INGRESOS", f"Bs. {ing:,.2f}")
-        c2.metric("EGRESOS", f"Bs. {egr:,.2f}")
-        c3.metric("COMISIONES", f"Bs. {com:,.2f}")
+        c1.metric("INGRESOS (+)", f"Bs. {t_ing:,.2f}")
+        c2.metric("EGRESOS NETOS (-)", f"Bs. {t_egr_neto:,.2f}")
+        c3.metric("COMISIONES", f"Bs. {t_com:,.2f}")
         c4.metric("SALDO FINAL", f"Bs. {saldo_f:,.2f}")
 
         st.markdown(f'<div class="pendiente-container"><div class="pendiente-text">Por Justificar: Bs. {pend:,.2f}</div></div>', unsafe_allow_html=True)
@@ -159,6 +160,5 @@ if arch_pdf:
 
         if st.button("💾 CERRAR MES Y GUARDAR", use_container_width=True):
             conn = sqlite3.connect('sumaia_history.db')
-            with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%Y-%m-%d %H:%M"), ing, egr, com, saldo_f, "CIERRE"))
+            with conn: conn.execute("INSERT INTO cierres VALUES (?,?,?,?,?,?)", (datetime.now().strftime("%Y-%m-%d %H:%M"), t_ing, t_egr_neto, t_com, saldo_f, "CIERRE"))
             st.success("Guardado."); st.rerun()
-
