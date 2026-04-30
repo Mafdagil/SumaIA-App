@@ -1,0 +1,9 @@
+streamlit
+pandas
+pdfplumber
+pytesseract
+Pillow
+plotly
+rapidfuzz
+st-gsheets-connection
+xlsxwriter
